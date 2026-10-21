@@ -1,0 +1,948 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0c0d12">
+<title>NeuroLab AI</title>
+<!-- Supabase Client -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+:root {
+  --bg:#0c0d12;--panel:#12141c;--panel2:#191c26;
+  --line:#292d3a;--text:#f1f2fa;--muted:#969caf;
+  --accent:#8a78ff;--accent2:#6b55e8;--green:#54d6a1;--red:#ff7777;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:15px/1.6 system-ui,-apple-system,sans-serif}
+button,textarea,input,select{font:inherit}
+button{cursor:pointer;color:var(--text);background:var(--panel2);border:1px solid var(--line);border-radius:11px;padding:9px 12px;transition: all 0.2s;}
+button:disabled{opacity:.45;cursor:wait}
+button:hover:not(:disabled) { background: #202331; }
+.primary{background:var(--accent2);border-color:transparent}
+.primary:hover:not(:disabled){background:var(--accent)}
+.danger{background:#3d1520;color:#ff6688;border-color:#5c1b2d}
+.danger:hover:not(:disabled){background:#5c1b2d}
+
+.app{min-height:100dvh;display:grid;grid-template-columns:255px minmax(0,1fr)}
+.sidebar{background:#101118;border-right:1px solid var(--line);padding:14px;display:flex;flex-direction:column;gap:12px;min-width:0}
+.brand{display:flex;align-items:center;gap:10px;padding:5px 2px 15px}
+.logo{width:39px;height:39px;display:grid;place-items:center;border-radius:13px;background:linear-gradient(135deg,#aa9cff,#5944d7);font-size:20px;font-weight:900}
+.brand strong{display:block;font-size:16px}
+.brand small{color:var(--muted);font-size:11px}
+.newchat{width:100%;text-align:left;background:#1c1b2d;border-color:#393257;color:#c6bdff}
+.section-label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin:7px 0}
+.history{overflow:auto;display:flex;flex-direction:column;gap:4px;flex:1;min-height:60px}
+.history-item{display:flex;align-items:center;gap:6px}
+.history-item button{border:0;background:transparent;text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;font-size:13px;padding:9px;border-radius:8px}
+.history-item button.active{background:#20202f;color:#fff}
+.history-item .del{flex:none;padding:6px;color:var(--muted);border-radius:8px}
+.servercard{border:1px solid var(--line);border-radius:13px;padding:12px;background:var(--panel)}
+.serverline{display:flex;gap:7px;align-items:center;font-size:12px}
+.dot{width:7px;height:7px;border-radius:50%;background:var(--red);flex:none;transition:background 0.3s}
+.servernote{font-size:11px;color:var(--muted);margin-top:7px;overflow-wrap:anywhere}
+
+main{min-width:0;display:flex;flex-direction:column;height:100dvh;overflow:hidden}
+.topbar{height:59px;flex:none;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;padding:0 20px;gap:10px}
+.topbar-title{font-size:13px;font-weight:650}
+.topbar-sub{font-size:11px;color:var(--muted)}
+.top-actions{display:flex;align-items:center;gap:8px}
+.iconbtn{padding:8px 10px}
+.tabs-nav { display: flex; gap: 8px; padding: 0 20px; border-bottom: 1px solid var(--line); background: var(--bg); }
+.tab-btn { border: none; background: transparent; padding: 12px 4px; color: var(--muted); border-bottom: 2px solid transparent; border-radius: 0; font-weight: 600; font-size: 14px; }
+.tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); background: transparent; }
+.tab-btn:hover:not(.active) { background: transparent; color: var(--text); }
+
+/* --- Chat View --- */
+.view-container { flex: 1; display: none; flex-direction: column; overflow: hidden; min-height: 0; }
+.view-container.active { display: flex; }
+.chat{flex:1;overflow-y:auto;min-height:0;scroll-behavior:smooth}
+.welcome{min-height:100%;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;padding:30px 20px}
+.welcome-logo{width:65px;height:65px;display:grid;place-items:center;border-radius:22px;background:linear-gradient(140deg,#9a8bff,#5d49d8);font-size:31px;margin-bottom:20px;box-shadow:0 12px 50px #6852df25}
+.welcome h1{font-size:clamp(24px,4vw,36px);letter-spacing:-1px;margin:0}
+.welcome p{color:var(--muted);max-width:440px;margin:8px 0 24px}
+.suggestions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;width:min(100%,520px)}
+.suggestion{background:var(--panel);text-align:left;padding:13px;font-size:13px}
+.suggestion b{display:block;margin-bottom:4px;color:var(--accent)}
+.suggestion span{font-size:12px;color:var(--muted)}
+
+.messages{max-width:850px;margin:auto;padding:24px 22px 30px}
+.message{display:flex;gap:12px;margin-bottom:26px;align-items:flex-start}
+.avatar{width:30px;height:30px;flex:none;border-radius:10px;display:grid;place-items:center;background:var(--panel2);font-size:12px;font-weight:800}
+.message.assistant .avatar{background:#292342;color:#c6bdff}
+.msgbody{min-width:0;flex:1}
+.msghead{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:12px;font-weight:700;margin:3px 0 7px}
+.msgtext{white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.75}
+.msgtext p{margin:0 0 12px}
+.msgtext pre{white-space:pre;overflow:auto;background:#090b10;border:1px solid var(--line);border-radius:11px;padding:13px;margin:12px 0;font:13px/1.65 ui-monospace,SFMono-Regular,Consolas,monospace}
+.msgtext code:not(pre code){background:#242535;padding:2px 5px;border-radius:5px;font: .9em ui-monospace,monospace}
+.msg-actions{display:flex;gap:6px;margin-top:9px}
+.tiny{font-size:11px;padding:5px 8px;background:transparent}
+.composer-wrap{padding:12px 18px max(13px,env(safe-area-inset-bottom));background:linear-gradient(0deg,var(--bg) 75%,transparent)}
+.composer{max-width:820px;margin:auto;border:1px solid #343748;background:#151720;border-radius:17px;padding:10px;box-shadow:0 10px 45px #0003}
+#prompt{width:100%;min-height:48px;max-height:180px;resize:none;border:0;outline:0;background:transparent;color:var(--text);padding:8px}
+.composer-bottom{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.composer-hint{font-size:11px;color:var(--muted)}
+.send{width:38px;height:38px;padding:0;font-size:19px}
+.disclaimer{font-size:10px;color:var(--muted);text-align:center;margin:7px auto 0;max-width:820px}
+
+/* --- Visualizer View --- */
+.visualizer{flex:1; overflow-y:auto; padding:20px; display:flex; flex-direction:column; align-items:center;}
+.viz-grid { display: grid; grid-template-columns: 1fr 340px; gap: 20px; max-width: 1000px; width: 100%; }
+.viz-card { background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 20px; }
+.viz-controls { display: flex; flex-direction: column; gap: 12px; }
+.viz-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 8px;}
+.viz-row label { font-size: 13px; color: var(--muted); }
+.viz-row input[type=number], .viz-row select { background: #0c0e14; border: 1px solid var(--line); color: white; padding: 6px 10px; border-radius: 8px; width: 100px; text-align: right;}
+.viz-row input[type=range] { flex: 1; accent-color: var(--accent); }
+canvas { display: block; border-radius: 12px; max-width: 100%; height: auto; background: #080a0f; border: 1px solid var(--line); }
+.stat { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid var(--line); font-size: 13px; }
+.stat:last-child { border: none; }
+.stat .val { color: var(--accent); font-family: monospace; font-weight: 600; }
+
+/* --- Modals & Drawers --- */
+.overlay{position:fixed;inset:0;background:#0009;z-index:5;display:none}
+.overlay.open{display:block}
+.drawer{position:fixed;z-index:6;right:0;top:0;bottom:0;width:min(410px,94vw);background:var(--panel);border-left:1px solid var(--line);padding:17px;overflow:auto;transform:translateX(100%);transition:transform .2s}
+.drawer.open{transform:translateX(0)}
+.drawer-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:18px}
+.drawer h2{font-size:16px; margin:0;}
+.metric{padding:11px 0;border-bottom:1px solid var(--line)}
+.metric-label{font-size:11px;color:var(--muted)}
+.metric-value{font-size:17px;font-weight:700;overflow-wrap:anywhere}
+.progress{height:6px;border-radius:8px;background:#292d3a;margin:12px 0;overflow:hidden}
+.bar{height:100%;width:0;background:linear-gradient(90deg,#6b55e8,#b6a9ff);transition:width .3s}
+.field{margin:13px 0}
+.field label{display:block;color:var(--muted);font-size:12px;margin-bottom:6px}
+.field textarea,.field input{width:100%;background:#0c0e14;border:1px solid var(--line);border-radius:10px;color:var(--text);padding:10px;outline:0}
+.field textarea{min-height:85px;resize:vertical}
+.full{width:100%;margin-top:9px}
+.notice{font-size:12px;color:var(--muted);margin-top:12px}
+#toast{font-size:12px;margin-top:8px; color: var(--green);}
+#error{color:var(--red);overflow-wrap:anywhere}
+
+@media(max-width:850px){
+ .viz-grid { grid-template-columns: 1fr; }
+}
+@media(max-width:700px){
+ .app{grid-template-columns:1fr}
+ .sidebar{display:none}
+ main{height:100dvh;height:100svh}
+ .topbar{padding:0 12px;height:54px}
+ .mobile-brand{display:flex!important;align-items:center;gap:8px}
+ .mobile-brand .logo{width:32px;height:32px;border-radius:10px;font-size:16px}
+ .topbar-title{font-size:12px}
+ .topbar-sub{display:none}
+ .messages{padding:18px 13px}
+ .message{gap:9px;margin-bottom:23px}
+ .avatar{width:27px;height:27px}
+ .composer-wrap{padding:9px 10px max(9px,env(safe-area-inset-bottom))}
+ .composer{padding:7px}
+ .suggestions{grid-template-columns:1fr}
+ .welcome{padding:22px 16px}
+ .welcome p{margin-bottom:18px}
+ .composer-hint{font-size:10px}
+ .visualizer { padding: 10px; }
+ .tabs-nav { padding: 0 10px; }
+}
+@media(min-width:701px){.mobile-brand{display:none!important}}
+</style>
+</head>
+<body>
+<div class="app">
+<!-- SIDEBAR -->
+<aside class="sidebar">
+  <div class="brand"><div class="logo">N</div><div><strong>NeuroLab AI</strong><small>DEEP LEARNING LAB</small></div></div>
+  <button class="newchat" id="newChat">＋ Новый чат</button>
+  <div class="section-label">История</div>
+  <div class="history" id="history"></div>
+  <div class="servercard">
+    <div class="serverline"><span class="dot" id="sideDot"></span><span id="sideStatus">Подключение...</span></div>
+    <div class="servernote" id="sideModel">Проверка локальной модели...</div>
+    <button class="tiny" id="openSettings">Настройки и обучение ↗</button>
+  </div>
+</aside>
+
+<!-- MAIN -->
+<main>
+  <div class="topbar">
+    <div class="mobile-brand"><div class="logo">N</div><strong style="font-size:14px">NeuroLab</strong></div>
+    <div><div class="topbar-title" id="chatTitle">Новый чат</div><div class="topbar-sub">Локальная нейросеть Swish+Adam</div></div>
+    <div class="top-actions">
+      <button class="iconbtn" id="mobileHistory" title="История">☰</button>
+      <button class="iconbtn" id="settingsBtn" title="Настройки">⚙</button>
+    </div>
+  </div>
+
+  <!-- TABS -->
+  <div class="tabs-nav">
+    <button class="tab-btn active" data-tab="chat">💬 Чат</button>
+    <button class="tab-btn" data-tab="viz">🎯 Визуализатор</button>
+  </div>
+
+  <!-- CHAT VIEW -->
+  <div id="view-chat" class="view-container active">
+    <div class="chat" id="chat">
+      <div class="welcome" id="welcome">
+        <div class="welcome-logo">✳</div>
+        <h1>Что создадим сегодня?</h1>
+        <p>Я нейросеть нового поколения. Обучи меня в настройках, и я буду отвечать на твои вопросы.</p>
+        <div class="suggestions">
+          <button class="suggestion" data-prompt="Привет"><b>✦ Поздороваться</b><span>Проверить связь</span></button>
+          <button class="suggestion" data-prompt="Что такое нейросеть?"><b>◈ Изучить ИИ</b><span>Объяснения</span></button>
+        </div>
+      </div>
+      <div class="messages" id="messages"></div>
+    </div>
+    <div class="composer-wrap">
+      <form class="composer" id="form">
+        <textarea id="prompt" rows="1" placeholder="Спроси что угодно..." required></textarea>
+        <div class="composer-bottom"><span class="composer-hint">Enter — отправить</span><button class="primary send" id="send" aria-label="Отправить">↑</button></div>
+      </form>
+      <div class="disclaimer">ИИ может ошибаться. Обучите его на своих данных для лучшего результата.</div>
+    </div>
+  </div>
+
+  <!-- VISUALIZER VIEW -->
+  <div id="view-viz" class="view-container visualizer">
+    <div class="viz-grid">
+      <div class="viz-card">
+        <canvas id="mainCanvas" width="500" height="500" style="width:100%;"></canvas>
+        <div style="display:flex; gap:10px; margin-top:15px;">
+          <button id="startBtn" class="primary" style="flex:1">▶ Обучить</button>
+          <button id="autoTuneBtn" class="magic" style="flex:1; background:#ff00ea; border:none;">🚀 Турбо-обучение</button>
+          <button id="resetBtn" class="danger">↻ Сброс</button>
+        </div>
+        <div id="tuneStatus" class="notice" style="display:none; text-align:center; padding:10px; background:#131a30; border-radius:8px; margin-top:10px;"></div>
+      </div>
+
+      <div class="viz-card viz-controls">
+        <h3>Настройки сети</h3>
+        <div class="viz-row">
+          <label>Нейронов (2–2048)</label>
+          <input type="number" id="hiddenInput" min="2" max="2048" value="32">
+        </div>
+        <div class="viz-row">
+          <label>Слоёв</label>
+          <select id="layers">
+            <option value="2" selected>2 скрытых</option>
+            <option value="3">3 скрытых</option>
+          </select>
+        </div>
+        <div class="viz-row">
+          <label>Активация</label>
+          <select id="activation">
+            <option value="swish" selected>Swish (SiLU)</option>
+            <option value="relu">ReLU</option>
+            <option value="tanh">tanh</option>
+          </select>
+        </div>
+        <div class="viz-row">
+          <label>Задача</label>
+          <select id="task">
+            <option value="xor">XOR</option>
+            <option value="circle">Круг</option>
+            <option value="spiral">Спираль</option>
+            <option value="custom">Свои точки</option>
+          </select>
+        </div>
+        
+        <hr style="border:0; border-top:1px solid var(--line); margin:15px 0;">
+        
+        <div class="stat"><span>Эпоха</span><span class="val" id="epoch">0</span></div>
+        <div class="stat"><span>Loss</span><span class="val" id="loss">—</span></div>
+        <div class="stat"><span>Точность</span><span class="val" id="accuracy">—</span></div>
+        <div class="stat"><span>FPS</span><span class="val" id="fps">—</span></div>
+
+        <hr style="border:0; border-top:1px solid var(--line); margin:15px 0;">
+        
+        <div class="viz-row" style="justify-content:flex-start; gap:10px;">
+          <input type="checkbox" id="addMode" style="width:18px;height:18px; accent-color:var(--accent);">
+          <label for="addMode" style="margin:0;">Рисовать точки</label>
+        </div>
+        <div style="display:flex; gap:10px; margin-top:10px;">
+          <button id="class0Btn" class="primary" style="flex:1; background:#55bbff;">○ Класс 0</button>
+          <button id="class1Btn" style="flex:1; background:#ff9955;">● Класс 1</button>
+        </div>
+        <button id="clearBtn" style="width:100%; margin-top:10px;">Очистить точки</button>
+      </div>
+    </div>
+  </div>
+</main>
+</div>
+
+<!-- OVERLAY & DRAWER -->
+<div class="overlay" id="overlay"></div>
+<aside class="drawer" id="drawer">
+  <div class="drawer-head"><h2>Обучение и настройки</h2><button id="closeSettings">✕</button></div>
+  
+  <div class="metric"><div class="metric-label">Модель</div><div class="metric-value" id="model">Swish + AdamW</div></div>
+  <div class="metric"><div class="metric-label">Устройство</div><div class="metric-value">Browser JS Engine</div></div>
+  <div class="metric"><div class="metric-label">Обучающих примеров</div><div class="metric-value" id="count">0</div></div>
+  <div class="metric"><div class="metric-label">Последний loss</div><div class="metric-value" id="lossVal">—</div></div>
+  
+  <p class="notice" id="stage">Чатбот готов к обучению</p>
+  <div class="progress"><div class="bar" id="bar"></div></div>
+  <div class="notice" id="percent">0%</div>
+  
+  <button class="primary full" id="trainChatBtn">Запустить обучение чатбота</button>
+  <p class="notice">Добавляй примеры «вопрос — правильный ответ». Нейросеть выучит их и будет использовать в диалоге.</p>
+  
+  <h2 style="margin-top:25px">Добавить обучающую пару</h2>
+  <div class="field"><label>Вопрос</label><textarea id="question" placeholder="Например: что такое космос"></textarea></div>
+  <div class="field"><label>Правильный ответ</label><textarea id="answer" placeholder="Например: Космос — это бесконечное пространство вокруг нас."></textarea></div>
+  <button class="full" id="save">Добавить в базу</button>
+  
+  <div id="toast"></div><p id="error" class="notice"></p>
+</aside>
+
+<script>
+// ==========================================
+// ИНИЦИАЛИЗАЦИЯ SUPABASE
+// ==========================================
+const SUPABASE_URL = 'https://tutuwjrrimzwgomktkuw.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_d5ppvRVWnqbaCZdKA9kL4Q_JTO2siBJ';
+let supabase = null;
+try {
+  supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+} catch(e) { console.error('Supabase init failed', e); }
+
+const $=id=>document.getElementById(id);
+
+// ==========================================
+// УТИЛИТЫ НЕЙРОСЕТИ
+// ==========================================
+const sigmoid = x => 1 / (1 + Math.exp(-x));
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const STOP_WORDS = new Set(['что','такое','как','это','ты','вы','у','меня','тебя','в','на','и','а','не','ни','но','или','я','мы','они','она','оно','мне','твой','твоя','твое','твои','ваш','ваша','ваше','про','по','за','для','от','до','же','ли','бы']);
+
+function tokenize(text) {
+  return String(text).toLowerCase().replace(/[^a-zа-яё0-9\s]/gi, ' ').split(/\s+/).filter(w => w.length > 0 && !STOP_WORDS.has(w));
+}
+function rawWords(text) {
+  return String(text).toLowerCase().replace(/[^a-zа-яё0-9\s]/gi, ' ').split(/\s+/).filter(w => w.length > 0);
+}
+
+// ==========================================
+// КЛАСС НЕЙРОСЕТИ (Adam + Swish)
+// ==========================================
+class NeuralNet {
+  constructor(sizes, activation = 'swish', outputType = 'sigmoid') {
+    this.sizes = sizes;
+    this.activation = activation;
+    this.outputType = outputType;
+    this.beta1 = 0.9;
+    this.beta2 = 0.999;
+    this.epsilon = 1e-8;
+    this.t = 0;
+    this.lr = 0.01;
+    this.weightDecay = 0.0001;
+
+    this.W = []; this.b = [];
+    this.mW = []; this.vW = [];
+    this.mb = []; this.vb = [];
+
+    for (let i = 0; i < sizes.length - 1; i++) {
+      const inSize = sizes[i], outSize = sizes[i + 1];
+      const scale = (this.activation === 'relu' || this.activation === 'swish') 
+        ? Math.sqrt(2 / inSize) : Math.sqrt(1 / inSize);
+      
+      this.W.push(Array.from({ length: outSize }, () => 
+        Array.from({ length: inSize }, () => (Math.random() * 2 - 1) * scale)));
+      this.b.push(new Float32Array(outSize));
+      
+      this.mW.push(Array.from({ length: outSize }, () => new Float32Array(inSize)));
+      this.vW.push(Array.from({ length: outSize }, () => new Float32Array(inSize)));
+      this.mb.push(new Float32Array(outSize));
+      this.vb.push(new Float32Array(outSize));
+    }
+    this._dW = this.W.map(layer => layer.map(row => new Float32Array(row.length)));
+    this._db = this.b.map(b => new Float32Array(b.length));
+  }
+
+  act(x) {
+    if (this.activation === 'relu') return x > 0 ? x : 0;
+    if (this.activation === 'swish') { const s = sigmoid(x); return x * s; }
+    return Math.tanh(x);
+  }
+  actPrime(z) {
+    if (this.activation === 'relu') return z > 0 ? 1 : 0;
+    if (this.activation === 'swish') {
+      const s = sigmoid(z); return s + z * s * (1 - s);
+    }
+    const t = Math.tanh(z); return 1 - t * t;
+  }
+
+  forward(input) {
+    let a = input;
+    const activations = [a], zs = [null];
+    const L = this.W.length;
+    for (let l = 0; l < L; l++) {
+      const outSize = this.W[l].length, inSize = a.length;
+      const z = new Float32Array(outSize);
+      for (let i = 0; i < outSize; i++) {
+        let s = this.b[l][i];
+        const row = this.W[l][i];
+        for (let j = 0; j < inSize; j++) s += row[j] * a[j];
+        z[i] = s;
+      }
+      zs.push(z);
+      const isOut = l === L - 1;
+      const newA = new Float32Array(outSize);
+      if (isOut) {
+        if (this.outputType === 'sigmoid') {
+          for (let i = 0; i < outSize; i++) newA[i] = sigmoid(z[i]);
+        } else {
+          let mx = -Infinity;
+          for (let i = 0; i < outSize; i++) if (z[i] > mx) mx = z[i];
+          let sum = 0;
+          for (let i = 0; i < outSize; i++) { newA[i] = Math.exp(z[i] - mx); sum += newA[i]; }
+          for (let i = 0; i < outSize; i++) newA[i] /= sum;
+        }
+      } else {
+        for (let i = 0; i < outSize; i++) newA[i] = this.act(z[i]);
+      }
+      a = newA; activations.push(a);
+    }
+    return { activations, zs };
+  }
+
+  zeroGradients() {
+    for (let l = 0; l < this._dW.length; l++) {
+      for (let i = 0; i < this._dW[l].length; i++) this._dW[l][i].fill(0);
+      this._db[l].fill(0);
+    }
+  }
+
+  trainBatch(inputs, targets) {
+    const L = this.W.length;
+    const batchSize = inputs.length;
+    this.t++;
+    this.zeroGradients();
+
+    for (let s = 0; s < batchSize; s++) {
+      const { activations, zs } = this.forward(inputs[s]);
+      const out = activations[L];
+      const target = targets[s];
+      let delta = new Float32Array(out.length);
+      for (let i = 0; i < out.length; i++) delta[i] = out[i] - target[i];
+
+      for (let l = L - 1; l >= 0; l--) {
+        const aPrev = activations[l];
+        const inSize = aPrev.length, outSize = this.W[l].length;
+        let nextDelta = null;
+        if (l > 0) {
+          nextDelta = new Float32Array(inSize);
+          for (let j = 0; j < inSize; j++) {
+            let sum = 0;
+            for (let i = 0; i < outSize; i++) sum += this.W[l][i][j] * delta[i];
+            nextDelta[j] = sum * this.actPrime(zs[l][j]);
+          }
+        }
+        for (let i = 0; i < outSize; i++) {
+          const d = delta[i];
+          this._db[l][i] += d / batchSize;
+          for (let j = 0; j < inSize; j++) this._dW[l][i][j] += (d * aPrev[j]) / batchSize;
+        }
+        if (nextDelta) delta = nextDelta;
+      }
+    }
+
+    for (let l = 0; l < L; l++) {
+      for (let i = 0; i < this.W[l].length; i++) {
+        for (let j = 0; j < this.W[l][i].length; j++) {
+          const g = this._dW[l][i][j] + this.weightDecay * this.W[l][i][j];
+          this.mW[l][i][j] = this.beta1 * this.mW[l][i][j] + (1 - this.beta1) * g;
+          this.vW[l][i][j] = this.beta2 * this.vW[l][i][j] + (1 - this.beta2) * g * g;
+          const mHat = this.mW[l][i][j] / (1 - Math.pow(this.beta1, this.t));
+          const vHat = this.vW[l][i][j] / (1 - Math.pow(this.beta2, this.t));
+          this.W[l][i][j] -= this.lr * mHat / (Math.sqrt(vHat) + this.epsilon);
+        }
+        const gb = this._db[l][i];
+        this.mb[l][i] = this.beta1 * this.mb[l][i] + (1 - this.beta1) * gb;
+        this.vb[l][i] = this.beta2 * this.vb[l][i] + (1 - this.beta2) * gb * gb;
+        const mbHat = this.mb[l][i] / (1 - Math.pow(this.beta1, this.t));
+        const vbHat = this.vb[l][i] / (1 - Math.pow(this.beta2, this.t));
+        this.b[l][i] -= this.lr * mbHat / (Math.sqrt(vbHat) + this.epsilon);
+      }
+    }
+  }
+  predict(input) {
+    const { activations } = this.forward(input);
+    return activations[activations.length - 1];
+  }
+}
+
+// ==========================================
+// ЛОГИКА ЧАТА И ИСТОРИИ
+// ==========================================
+const STORAGE_KEY = 'neurolab_chats_v2';
+let chats = [];
+let activeId = null;
+let busy = false;
+
+function makeId(){return Date.now().toString(36)+Math.random().toString(36).slice(2,7)}
+function loadChats(){
+  try{chats=JSON.parse(localStorage.getItem(STORAGE_KEY)||'[]')}catch{chats=[]}
+  if(!Array.isArray(chats))chats=[];
+  if(!chats.length)createChat(false);else{activeId=chats[0].id;renderHistory();renderChat()}
+}
+function persist(){
+  try{localStorage.setItem(STORAGE_KEY,JSON.stringify(chats))}catch{}
+  // Опционально: сохранить в Supabase
+  if (supabase) {
+    supabase.from('chats').upsert(chats).then(({error}) => {
+      if (error) console.error("Supabase save error:", error);
+    });
+  }
+}
+function current(){return chats.find(c=>c.id===activeId)}
+function createChat(render=true){
+  const c={id:makeId(),title:'Новый чат',messages:[],updated:Date.now()};
+  chats.unshift(c);activeId=c.id;persist();
+  if(render){renderHistory();renderChat()}
+}
+function renderHistory(){
+  $('history').replaceChildren();
+  chats.forEach(c=>{
+    const row=document.createElement('div');row.className='history-item';
+    const b=document.createElement('button');b.textContent=c.title;b.className=c.id===activeId?'active':'';
+    b.onclick=()=>{activeId=c.id;renderHistory();renderChat();closeDrawer()};
+    const d=document.createElement('button');d.className='del';d.textContent='×';
+    d.onclick=()=>{
+      chats=chats.filter(x=>x.id!==c.id);
+      if(!chats.length)createChat(false);
+      if(activeId===c.id)activeId=chats[0].id;
+      persist();renderHistory();renderChat();
+    };
+    row.append(b,d);$('history').append(row);
+  });
+}
+function renderChat(){
+  const c=current();if(!c)return;
+  $('chatTitle').textContent=c.title;
+  $('messages').replaceChildren();
+  $('welcome').style.display=c.messages.length?'none':'flex';
+  for(const m of c.messages)drawMessage(m.role,m.content,false);
+  $('chat').scrollTop=$('chat').scrollHeight;
+}
+function drawMessage(role,text,scroll=true){
+  const wrap=document.createElement('div');wrap.className='message '+role;
+  const avatar=document.createElement('div');avatar.className='avatar';avatar.textContent=role==='user'?'Т':'N';
+  const body=document.createElement('div');body.className='msgbody';
+  const head=document.createElement('div');head.className='msghead';
+  const who=document.createElement('span');who.textContent=role==='user'?'Вы':'NeuroLab AI';
+  head.append(who);
+  const content=document.createElement('div');content.className='msgtext';
+  content.textContent=text;
+  body.append(head,content);
+  if(role==='assistant'){
+    const actions=document.createElement('div');actions.className='msg-actions';
+    const copy=document.createElement('button');copy.className='tiny';copy.textContent='Копировать';
+    copy.onclick=async()=>{try{await navigator.clipboard.writeText(text);copy.textContent='Скопировано ✓'}catch{copy.textContent='Ошибка'}};
+    actions.append(copy);body.append(actions);
+  }
+  wrap.append(avatar,body);$('messages').append(wrap);
+  if(scroll)$('chat').scrollTop=$('chat').scrollHeight;
+  return content;
+}
+
+// ==========================================
+// ЧАТБОТ (Обучение)
+// ==========================================
+let chatbot = null;
+
+function parseTrainingData() {
+  const lines = $('trainingData').value.split('\n');
+  const answerMap = new Map();
+  const pairs = [];
+  for (const raw of lines) {
+    const line = raw.trim();
+    if (!line || !line.includes('|')) continue;
+    const idx = line.indexOf('|');
+    const q = line.slice(0, idx).trim();
+    const a = line.slice(idx + 1).trim();
+    if (!q || !a) continue;
+    if (!answerMap.has(a)) answerMap.set(a, answerMap.size);
+    pairs.push({ q, a, answerIdx: answerMap.get(a) });
+  }
+  return { pairs, answers: [...answerMap.keys()] };
+}
+
+async function trainChatbot() {
+  if (busy) return;
+  const { pairs, answers } = parseTrainingData();
+  if (pairs.length < 2) return alert('Добавьте минимум 2 пары в настройках!');
+
+  busy = true;
+  $('trainChatBtn').disabled = true;
+  $('send').disabled = true;
+  const status = $('stage');
+  const fill = $('bar');
+  
+  const vocab = new Map();
+  const set = new Set();
+  for (const p of pairs) for (const w of tokenize(p.q)) set.add(w);
+  let vi = 0;
+  for (const w of set) vocab.set(w, vi++);
+  const vocabSize = vocab.size;
+
+  function vectorize(text) {
+    const vec = new Float32Array(vocabSize);
+    for (const w of tokenize(text)) {
+      const idx = vocab.get(w);
+      if (idx !== undefined) vec[idx] = 1;
+    }
+    return vec;
+  }
+
+  chatbot = {
+    vocab, pairs, answers, vectorize,
+    nn: new NeuralNet([vocabSize, 64, 32, answers.length], 'swish', 'softmax'),
+    trained: false
+  };
+  chatbot.nn.lr = 0.02;
+
+  const EPOCHS = 600;
+  const inputs = pairs.map(p => vectorize(p.q));
+  const targets = pairs.map(p => {
+    const t = new Float32Array(answers.length);
+    t[p.answerIdx] = 1;
+    return t;
+  });
+
+  for (let e = 0; e < EPOCHS; e++) {
+    chatbot.nn.trainBatch(inputs, targets);
+    if (e % 20 === 0 || e === EPOCHS - 1) {
+      let loss = 0;
+      for (let i = 0; i < inputs.length; i++) {
+        const probs = chatbot.nn.predict(inputs[i]);
+        loss -= Math.log(Math.max(probs[pairs[i].answerIdx], 1e-9));
+      }
+      loss /= inputs.length;
+      fill.style.width = ((e + 1) / EPOCHS * 100) + '%';
+      $('percent').textContent = Math.round((e + 1) / EPOCHS * 100) + '%';
+      status.textContent = `Обучение… эпоха ${e + 1}/${EPOCHS} · loss: ${loss.toFixed(3)}`;
+      $('lossVal').textContent = loss.toFixed(3);
+      await sleep(0);
+    }
+  }
+
+  chatbot.trained = true;
+  fill.style.width = '100%';
+  status.textContent = `✅ Обучено! Примеров: ${pairs.length}`;
+  $('count').textContent = pairs.length;
+  $('trainChatBtn').disabled = false;
+  $('send').disabled = false;
+  busy = false;
+  
+  $('toast').textContent = 'Модель успешно обучена!';
+  setTimeout(() => $('toast').textContent = '', 3000);
+}
+
+function sendChat() {
+  const input = $('prompt');
+  const text = input.value.trim();
+  if (!text) return;
+  
+  const c = current(); if (!c) return;
+  c.messages.push({ role: 'user', content: text });
+  if (c.messages.length === 1) c.title = text.slice(0, 38) + (text.length > 38 ? '…' : '');
+  persist(); renderHistory();
+  
+  $('welcome').style.display = 'none';
+  drawMessage('user', text);
+  input.value = '';
+  busy = true;
+  $('send').disabled = true;
+
+  const waiting = drawMessage('assistant', 'Думаю...');
+  
+  setTimeout(() => {
+    if (!chatbot || !chatbot.trained) {
+      waiting.textContent = 'Я пока не обучен. Зайдите в ⚙ Настройки и нажмите "Запустить обучение чатбота"!';
+    } else {
+      const meaningful = tokenize(text);
+      const unknownWords = meaningful.filter(w => !chatbot.vocab.has(w));
+      const knownWords = meaningful.filter(w => chatbot.vocab.has(w));
+
+      if (knownWords.length === 0 && unknownWords.length > 0) {
+         waiting.textContent = `Я не знаю слов: ${unknownWords.join(', ')}. Научите меня в настройках!`;
+      } else {
+         const x = chatbot.vectorize(text);
+         const probs = chatbot.nn.predict(x);
+         let best = 0;
+         for (let k = 1; k < probs.length; k++) if (probs[k] > probs[best]) best = k;
+         const answer = chatbot.answers[best];
+         let conf = probs[best];
+         if (unknownWords.length > 0) conf *= 0.3;
+         
+         if (conf < 0.35) {
+           waiting.textContent = `Не уверен, но возможно: ${answer} (уверенность ${Math.round(conf*100)}%)`;
+         } else {
+           waiting.textContent = answer;
+         }
+      }
+    }
+    c.messages.push({ role: 'assistant', content: waiting.textContent });
+    persist();
+    busy = false;
+    $('send').disabled = false;
+    $('chat').scrollTop = $('chat').scrollHeight;
+  }, 300);
+}
+
+// ==========================================
+// ВИЗУАЛИЗАТОР (Классификатор)
+// ==========================================
+let visualNN, visualPoints = [], visualEpoch = 0, visualLoss = 0;
+let visualLossHist = [], trainingVisual = false, visualRaf = null;
+let lastHiddenApplied = 32, currentClass = 0;
+
+const mainCanvas = $('mainCanvas');
+const mctx = mainCanvas.getContext('2d');
+
+function generateTask(name) {
+  if (name === 'xor') return [[-0.5,-0.5,0],[-0.5,0.5,1],[0.5,-0.5,1],[0.5,0.5,0]].map(([x,y,l]) => ({x,y,label:l}));
+  if (name === 'circle') {
+    const pts = [];
+    for (let i = 0; i < 300; i++) {
+      const x = Math.random()*1.8 - 0.9, y = Math.random()*1.8 - 0.9;
+      pts.push({ x, y, label: (x*x + y*y) < 0.3 ? 1 : 0 });
+    }
+    return pts;
+  }
+  if (name === 'spiral') {
+    const pts = [];
+    for (let i = 0; i < 400; i++) {
+      const r = i / 400 * 0.9;
+      const th = i / 400 * 6 * Math.PI;
+      const n = () => (Math.random() - 0.5) * 0.1;
+      pts.push({ x: r*Math.cos(th) + n(), y: r*Math.sin(th) + n(), label: 1 });
+      pts.push({ x: -r*Math.cos(th) + n(), y: -r*Math.sin(th) + n(), label: 0 });
+    }
+    return pts;
+  }
+  return [];
+}
+
+function newVisualNN() {
+  const hidden = lastHiddenApplied;
+  const numLayers = parseInt($('layers').value);
+  const act = $('activation').value;
+  const sizes = [2];
+  for (let i = 0; i < numLayers; i++) sizes.push(hidden);
+  sizes.push(1);
+  const nn = new NeuralNet(sizes, act, 'sigmoid');
+  nn.lr = 0.01;
+  return nn;
+}
+
+function visualReset() {
+  trainingVisual = false;
+  if (visualRaf) cancelAnimationFrame(visualRaf);
+  visualRaf = null;
+  visualPoints = generateTask($('task').value);
+  visualNN = newVisualNN();
+  visualEpoch = 0; visualLoss = 0; visualLossHist = [];
+  $('startBtn').textContent = '▶ Обучить';
+  $('tuneStatus').style.display = 'none';
+  updateVisualStats();
+  drawVisualAll();
+}
+
+function updateVisualStats() {
+  $('epoch').textContent = visualEpoch;
+  $('loss').textContent = visualLoss ? visualLoss.toFixed(4) : '—';
+  if (visualPoints.length > 0 && visualNN) {
+    const maxSample = Math.min(visualPoints.length, 100);
+    let ok = 0;
+    const step = Math.max(1, Math.floor(visualPoints.length / maxSample));
+    for (let i = 0; i < visualPoints.length; i += step) {
+      const p = visualPoints[i];
+      const pred = visualNN.predict([p.x, p.y])[0];
+      if ((pred > 0.5 ? 1 : 0) === p.label) ok++;
+    }
+    const total = Math.ceil(visualPoints.length / step);
+    $('accuracy').textContent = Math.round(100 * ok / total) + '%';
+  }
+}
+
+function drawVisualAll() {
+  const W = mainCanvas.width, H = mainCanvas.height;
+  const RES = 40;
+  const cell = W / RES;
+  for (let i = 0; i < RES; i++) {
+    for (let j = 0; j < RES; j++) {
+      const x = (i + 0.5) / RES * 2 - 1;
+      const y = (j + 0.5) / RES * 2 - 1;
+      const out = visualNN ? visualNN.predict([x, y])[0] : 0.5;
+      const r = Math.round(15 + out * 240);
+      const g = Math.round(25 + out * 90);
+      const b = Math.round(95 - out * 50);
+      mctx.fillStyle = `rgb(${r},${g},${b})`;
+      mctx.fillRect(i * cell, j * cell, cell + 1, cell + 1);
+    }
+  }
+  for (const p of visualPoints) {
+    const px = (p.x + 1) / 2 * W, py = (p.y + 1) / 2 * H;
+    mctx.beginPath();
+    mctx.arc(px, py, 4, 0, Math.PI * 2);
+    mctx.fillStyle = p.label === 1 ? '#ff9955' : '#55bbff';
+    mctx.fill();
+    mctx.strokeStyle = '#fff'; mctx.lineWidth = 1; mctx.stroke();
+  }
+}
+
+function visualTrainStep() {
+  if (!trainingVisual) return;
+  const inputs = visualPoints.map(p => [p.x, p.y]);
+  const targets = visualPoints.map(p => [p.label]);
+  let totalLoss = 0, correct = 0;
+  const eps = 1e-7;
+  for (let i = 0; i < inputs.length; i++) {
+    const pred = visualNN.predict(inputs[i])[0];
+    const pr = Math.max(Math.min(pred, 1 - eps), eps);
+    const y = targets[i][0];
+    totalLoss += -(y * Math.log(pr) + (1 - y) * Math.log(1 - pr));
+    if ((pred > 0.5 ? 1 : 0) === visualPoints[i].label) correct++;
+  }
+  visualLoss = totalLoss / inputs.length;
+  visualLossHist.push(visualLoss);
+  if (visualLossHist.length > 400) visualLossHist.shift();
+  
+  $('epoch').textContent = visualEpoch;
+  $('loss').textContent = visualLoss.toFixed(4);
+  $('accuracy').textContent = Math.round(100 * correct / inputs.length) + '%';
+  
+  visualNN.trainBatch(inputs, targets);
+  visualEpoch++;
+  
+  if (visualEpoch % 2 === 0) drawVisualAll();
+  visualRaf = requestAnimationFrame(visualTrainStep);
+}
+
+async function autoTuneClassifier() {
+  if (!visualPoints.length) return;
+  trainingVisual = false;
+  if (visualRaf) cancelAnimationFrame(visualRaf);
+  
+  $('startBtn').disabled = true;
+  $('resetBtn').disabled = true;
+  $('autoTuneBtn').disabled = true;
+  const statusEl = $('tuneStatus');
+  statusEl.style.display = 'block';
+  
+  const EPOCHS = 2000;
+  const inputs = visualPoints.map(p => [p.x, p.y]);
+  const targets = visualPoints.map(p => [p.label]);
+  const eps = 1e-7;
+  
+  for (let e = 0; e < EPOCHS; e++) {
+    let totalLoss = 0, correct = 0;
+    for (let i = 0; i < inputs.length; i++) {
+      const pred = visualNN.predict(inputs[i])[0];
+      const pr = Math.max(Math.min(pred, 1 - eps), eps);
+      const y = targets[i][0];
+      totalLoss += -(y * Math.log(pr) + (1 - y) * Math.log(1 - pr));
+      if ((pred > 0.5 ? 1 : 0) === visualPoints[i].label) correct++;
+    }
+    visualLoss = totalLoss / inputs.length;
+    visualNN.trainBatch(inputs, targets);
+    visualEpoch++;
+    
+    if (e % 100 === 0 || e === EPOCHS - 1) {
+      $('epoch').textContent = visualEpoch;
+      $('loss').textContent = visualLoss.toFixed(5);
+      $('accuracy').textContent = Math.round(100 * correct / inputs.length) + '%';
+      drawVisualAll();
+      statusEl.innerHTML = `
+        <div>🚀 Турбо-обучение...</div>
+        <div style="height:6px; background:#292d3a; border-radius:3px; margin:8px 0; overflow:hidden;">
+          <div style="width:${(e / EPOCHS * 100)}%; height:100%; background:var(--accent);"></div>
+        </div>
+        <div>Эпоха ${e}/${EPOCHS} · loss ${visualLoss.toFixed(5)}</div>
+      `;
+      await sleep(0);
+    }
+  }
+  statusEl.innerHTML = `<div style="color:var(--green);font-weight:bold;">✅ Турбо-обучение завершено!</div><div>Loss: ${visualLoss.toFixed(5)}</div>`;
+  $('startBtn').disabled = false;
+  $('resetBtn').disabled = false;
+  $('autoTuneBtn').disabled = false;
+}
+
+// ==========================================
+// БИНДИНГИ И ИНИЦИАЛИЗАЦИЯ UI
+// ==========================================
+// Вкладки
+document.querySelectorAll('.tab-btn').forEach(btn => {
+  btn.onclick = () => {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.view-container').forEach(v => v.classList.remove('active'));
+    btn.classList.add('active');
+    $('view-' + btn.dataset.tab).classList.add('active');
+    if (btn.dataset.tab === 'viz') drawVisualAll();
+  };
+});
+
+// Настройки
+function openSettings(){ $('drawer').classList.add('open'); $('overlay').classList.add('open'); }
+function closeDrawer(){ $('drawer').classList.remove('open'); $('overlay').classList.remove('open'); }
+$('settingsBtn').onclick=openSettings; $('openSettings').onclick=openSettings;
+$('closeSettings').onclick=closeDrawer; $('overlay').onclick=closeDrawer;
+$('mobileHistory').onclick=()=>{ if(window.innerWidth <= 700){ $('drawer').classList.contains('open')?closeDrawer():openSettings() } else openSettings() };
+
+// Новый чат
+$('newChat').onclick = () => createChat();
+
+// Отправка сообщения
+$('form').onsubmit = (e) => { e.preventDefault(); sendChat(); };
+$('prompt').onkeydown = (e) => { if(e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendChat(); } };
+document.querySelectorAll('.suggestion').forEach(b=>b.onclick=()=>{$('prompt').value=b.dataset.prompt;$('prompt').focus();});
+
+// Управление визуализатором
+$('hiddenInput').oninput = (e) => {
+  let v = parseInt(e.target.value);
+  if (v < 2) v = 2; if (v > 2048) v = 2048;
+  lastHiddenApplied = v;
+  clearTimeout(window.hidDebounce);
+  window.hidDebounce = setTimeout(visualReset, 500);
+};
+$('layers').onchange = visualReset;
+$('activation').onchange = visualReset;
+$('task').onchange = visualReset;
+
+$('startBtn').onclick = () => {
+  trainingVisual = !trainingVisual;
+  $('startBtn').textContent = trainingVisual ? '⏸ Пауза' : '▶ Обучить';
+  if (trainingVisual) visualRaf = requestAnimationFrame(visualTrainStep);
+  else cancelAnimationFrame(visualRaf);
+};
+$('resetBtn').onclick = visualReset;
+$('autoTuneBtn').onclick = autoTuneClassifier;
+$('clearBtn').onclick = () => { visualPoints = []; drawVisualAll(); };
+
+$('class0Btn').onclick = () => { currentClass = 0; $('class0Btn').classList.add('primary'); $('class1Btn').classList.remove('primary'); };
+$('class1Btn').onclick = () => { currentClass = 1; $('class1Btn').classList.add('primary'); $('class0Btn').classList.remove('primary'); };
+$('class1Btn').style.background = '#ff9955'; $('class0Btn').style.background = '#55bbff';
+
+mainCanvas.onclick = (e) => {
+  if (!$('addMode').checked) return;
+  const rect = mainCanvas.getBoundingClientRect();
+  const x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+  const y = ((e.clientY - rect.top) / rect.height) * 2 - 1;
+  visualPoints.push({ x, y, label: currentClass });
+  updateVisualStats();
+  drawVisualAll();
+};
+
+// Обработка кнопки обучения чатбота в настройках
+$('trainChatBtn').onclick = trainChatbot;
+
+// Старт
+loadChats();
+visualReset();
+</script>
+</body>
+      </html>
