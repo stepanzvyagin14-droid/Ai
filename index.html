@@ -1,0 +1,379 @@
+<!-- NEUROLAB AUTO-TRAINING -->
+<section id="ai-training" class="ai-panel">
+  <h2>NeuroLab · Auto Learning</h2>
+  <p>Настоящее обучение нейросети с изменением весов</p>
+
+  <label>Количество эпох</label>
+  <input id="epochs" type="number" value="500" min="10" max="10000">
+
+  <label>Скорость обучения</label>
+  <input id="lr" type="number" value="0.03" min="0.001" max="1" step="0.001">
+
+  <label>Скрытые нейроны</label>
+  <input id="neurons" type="number" value="16" min="4" max="128">
+
+  <button id="trainBtn">Обучить нейросеть</button>
+  <button id="autoBtn">Автонастройка</button>
+
+  <p id="trainStatus">Ожидание обучения</p>
+  <progress id="trainProgress" value="0" max="100"></progress>
+  <p>Ошибка: <b id="loss">—</b></p>
+  <p>Точность: <b id="accuracy">—</b></p>
+
+  <hr>
+
+  <h3>Примеры для обучения</h3>
+  <textarea id="trainData" rows="8">{"x":[0,0],"y":[0]}
+{"x":[0,1],"y":[1]}
+{"x":[1,0],"y":[1]}
+{"x":[1,1],"y":[0]}</textarea>
+
+  <button id="saveModelBtn">Сохранить модель</button>
+  <button id="loadModelBtn">Загрузить модель</button>
+
+  <hr>
+
+  <h3>Генератор кода</h3>
+  <textarea id="codePrompt" rows="3"
+    placeholder="Например: напиши HTML-калькулятор"></textarea>
+  <button id="generateCodeBtn">Создать код</button>
+  <textarea id="codeOutput" rows="12"
+    placeholder="Здесь появится код"></textarea>
+  <button id="copyCodeBtn">Копировать код</button>
+</section>
+
+<style>
+.ai-panel {
+  max-width: 760px;
+  margin: 20px auto;
+  padding: 22px;
+  color: #e8edff;
+  background: #111522;
+  border: 1px solid #303951;
+  border-radius: 18px;
+  font: 15px system-ui, sans-serif;
+}
+.ai-panel h2 { margin-top: 0; }
+.ai-panel label { display: block; margin-top: 12px; }
+.ai-panel input,
+.ai-panel textarea {
+  box-sizing: border-box;
+  width: 100%;
+  margin-top: 6px;
+  padding: 11px;
+  color: #e8edff;
+  background: #090d17;
+  border: 1px solid #303951;
+  border-radius: 9px;
+}
+.ai-panel button {
+  margin: 10px 5px 4px 0;
+  padding: 11px 15px;
+  color: white;
+  background: #6558e8;
+  border: 0;
+  border-radius: 9px;
+  cursor: pointer;
+}
+.ai-panel button:active { transform: scale(.98); }
+.ai-panel progress { width: 100%; height: 12px; }
+.ai-panel hr { border: 0; border-top: 1px solid #303951; margin: 22px 0; }
+</style>
+
+<script>
+(() => {
+  "use strict";
+
+  const $ = id => document.getElementById(id);
+  let model = null;
+  let training = false;
+
+  const sigmoid = x => 1 / (1 + Math.exp(-Math.max(-30, Math.min(30, x))));
+
+  function createNetwork(inputSize, hiddenSize, outputSize) {
+    const rand = n => Array.from({length:n}, () => (Math.random() * 2 - 1) * 0.5);
+
+    return {
+      inputSize,
+      hiddenSize,
+      outputSize,
+      w1: Array.from({length:hiddenSize}, () => rand(inputSize)),
+      b1: rand(hiddenSize),
+      w2: Array.from({length:outputSize}, () => rand(hiddenSize)),
+      b2: rand(outputSize),
+      trainedEpochs: 0
+    };
+  }
+
+  function forward(net, x) {
+    const hidden = net.w1.map((weights, i) =>
+      sigmoid(weights.reduce((s, w, j) => s + w * x[j], net.b1[i]))
+    );
+
+    const output = net.w2.map((weights, i) =>
+      sigmoid(weights.reduce((s, w, j) => s + w * hidden[j], net.b2[i]))
+    );
+
+    return {hidden, output};
+  }
+
+  function trainStep(net, x, y, lr) {
+    const {hidden, output} = forward(net, x);
+    const delta2 = output.map((o, i) => (o - y[i]) * o * (1 - o));
+    const delta1 = hidden.map((h, j) =>
+      h * (1 - h) * net.w2.reduce((sum, row, i) => sum + row[j] * delta2[i], 0)
+    );
+
+    // Обновляем веса выходного слоя
+    net.w2.forEach((row, i) => {
+      row.forEach((_, j) => row[j] -= lr * delta2[i] * hidden[j]);
+      net.b2[i] -= lr * delta2[i];
+    });
+
+    // Обновляем веса скрытого слоя
+    net.w1.forEach((row, i) => {
+      row.forEach((_, j) => row[j] -= lr * delta1[i] * x[j]);
+      net.b1[i] -= lr * delta1[i];
+    });
+
+    return output.reduce((sum, o, i) => sum + (o - y[i]) ** 2, 0) / output.length;
+  }
+
+  function parseData() {
+    const rows = $("trainData").value.trim().split("\n");
+    const data = rows.map((line, i) => {
+      const item = JSON.parse(line);
+      if (!Array.isArray(item.x) || !Array.isArray(item.y) ||
+          !item.x.length || !item.y.length ||
+          [...item.x, ...item.y].some(v => !Number.isFinite(v))) {
+        throw new Error("Некорректный пример в строке " + (i + 1));
+      }
+      return item;
+    });
+
+    if (data.length < 2) throw new Error("Добавь хотя бы два примера.");
+
+    const inputSize = data[0].x.length;
+    const outputSize = data[0].y.length;
+
+    if (data.some(d => d.x.length !== inputSize || d.y.length !== outputSize)) {
+      throw new Error("У всех примеров должны совпадать размеры x и y.");
+    }
+
+    return data;
+  }
+
+  function evaluate(net, data) {
+    let loss = 0, correct = 0;
+
+    data.forEach(({x, y}) => {
+      const out = forward(net, x).output;
+      loss += out.reduce((s, o, i) => s + (o - y[i]) ** 2, 0) / y.length;
+
+      const predicted = out.indexOf(Math.max(...out));
+      const expected = y.indexOf(Math.max(...y));
+      if (predicted === expected) correct++;
+    });
+
+    return {loss: loss / data.length, accuracy: correct / data.length};
+  }
+
+  async function train() {
+    if (training) return;
+    training = true;
+    $("trainBtn").disabled = true;
+
+    try {
+      const data = parseData();
+      const hidden = Math.max(4, Math.min(128, Number($("neurons").value) || 16));
+      const epochs = Math.max(10, Math.min(10000, Number($("epochs").value) || 500));
+      const lr = Math.max(0.001, Math.min(1, Number($("lr").value) || 0.03));
+
+      if (!model || model.inputSize !== data[0].x.length ||
+          model.outputSize !== data[0].y.length ||
+          model.hiddenSize !== hidden) {
+        model = createNetwork(data[0].x.length, hidden, data[0].y.length);
+      }
+
+      $("trainStatus").textContent = "Обучение...";
+      let loss = 0;
+
+      for (let epoch = 0; epoch < epochs; epoch++) {
+        // Перемешивание данных
+        const shuffled = [...data].sort(() => Math.random() - 0.5);
+
+        for (const sample of shuffled) {
+          loss = trainStep(model, sample.x, sample.y, lr);
+        }
+
+        model.trainedEpochs++;
+
+        if (epoch % 10 === 0 || epoch === epochs - 1) {
+          const result = evaluate(model, data);
+          $("trainProgress").value = (epoch + 1) / epochs * 100;
+          $("loss").textContent = result.loss.toFixed(6);
+          $("accuracy").textContent = (result.accuracy * 100).toFixed(1) + "%";
+          $("trainStatus").textContent =
+            "Эпоха " + (epoch + 1) + " из " + epochs +
+            " · всего обучено эпох: " + model.trainedEpochs;
+
+          // Не блокируем интерфейс телефона
+          await new Promise(resolve => setTimeout(resolve, 0));
+        }
+      }
+
+      localStorage.setItem("neurolab_model_v1", JSON.stringify(model));
+      $("trainStatus").textContent += " · модель сохранена";
+    } catch (err) {
+      $("trainStatus").textContent = "Ошибка: " + err.message;
+    } finally {
+      training = false;
+      $("trainBtn").disabled = false;
+    }
+  }
+
+  async function autoTune() {
+    try {
+      const data = parseData();
+      const original = model;
+      const settings = [
+        {lr:0.01, hidden:8},
+        {lr:0.03, hidden:16},
+        {lr:0.05, hidden:24}
+      ];
+
+      $("trainStatus").textContent = "Автонастройка: проверяю параметры...";
+      let best = null;
+
+      // Отделяем проверочные примеры от обучающих
+      const split = Math.max(1, Math.floor(data.length * 0.8));
+      const trainData = data.slice(0, split);
+      const testData = data.slice(split).length ? data.slice(split) : data;
+
+      for (const setting of settings) {
+        let candidate = createNetwork(data[0].x.length, setting.hidden, data[0].y.length);
+
+        for (let i = 0; i < 300; i++) {
+          for (const sample of trainData) {
+            trainStep(candidate, sample.x, sample.y, setting.lr);
+          }
+        }
+
+        const score = evaluate(candidate, testData).loss;
+        if (!best || score < best.score) {
+          best = {...setting, score, candidate};
+        }
+        await new Promise(resolve => setTimeout(resolve, 0));
+      }
+
+      model = best.candidate;
+      $("lr").value = best.lr;
+      $("neurons").value = best.hidden;
+      $("trainStatus").textContent =
+        "Лучшие проверенные настройки выбраны. Запусти обучение для всей базы.";
+
+      // Автонастройка не должна уничтожать ранее обученную модель без причины
+      if (original && original.inputSize === model.inputSize &&
+          original.outputSize === model.outputSize &&
+          original.hiddenSize === model.hiddenSize) {
+        model = original;
+      }
+    } catch (err) {
+      $("trainStatus").textContent = "Ошибка автонастройки: " + err.message;
+    }
+  }
+
+  $("trainBtn").addEventListener("click", train);
+  $("autoBtn").addEventListener("click", autoTune);
+
+  $("saveModelBtn").addEventListener("click", () => {
+    if (!model) {
+      $("trainStatus").textContent = "Сначала обучи модель.";
+      return;
+    }
+    localStorage.setItem("neurolab_model_v1", JSON.stringify(model));
+    $("trainStatus").textContent = "Веса модели сохранены.";
+  });
+
+  $("loadModelBtn").addEventListener("click", () => {
+    try {
+      const saved = localStorage.getItem("neurolab_model_v1");
+      if (!saved) throw new Error("Сохранённая модель не найдена.");
+      model = JSON.parse(saved);
+      $("trainStatus").textContent =
+        "Модель загружена. Обучено эпох: " + model.trainedEpochs;
+    } catch (err) {
+      $("trainStatus").textContent = err.message;
+    }
+  });
+
+  $("generateCodeBtn").addEventListener("click", () => {
+    const prompt = $("codePrompt").value.trim();
+    if (!prompt) {
+      $("codeOutput").value = "Напиши, какой код нужен.";
+      return;
+    }
+
+    // Это шаблонный помощник, а не большая языковая модель.
+    const p = prompt.toLowerCase();
+
+    if (p.includes("калькулятор")) {
+      $("codeOutput").value =
+`<!doctype html>
+<html lang="ru">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Калькулятор</title>
+<style>
+body{font:18px system-ui;max-width:320px;margin:40px auto;padding:16px}
+input,button{box-sizing:border-box;width:100%;padding:14px;margin:5px 0}
+</style>
+<h2>Калькулятор</h2>
+<input id="a" type="number" placeholder="Первое число">
+<input id="b" type="number" placeholder="Второе число">
+<button onclick="calc('+')">Сложить +</button>
+<button onclick="calc('-')">Вычесть −</button>
+<button onclick="calc('*')">Умножить ×</button>
+<button onclick="calc('/')">Разделить ÷</button>
+<p id="result">Результат появится здесь</p>
+<script>
+function calc(op){
+ const a=Number(document.querySelector('#a').value);
+ const b=Number(document.querySelector('#b').value);
+ let r;
+ if(op==='+')r=a+b;
+ if(op==='-')r=a-b;
+ if(op==='*')r=a*b;
+ if(op==='/')r=b===0?'На ноль делить нельзя':a/b;
+ document.querySelector('#result').textContent='Результат: '+r;
+}
+<\/script>
+</html>`;
+    } else {
+      $("codeOutput").value =
+"Локальный генератор пока поддерживает шаблон калькулятора. " +
+"Для генерации произвольного кода подключи языковую модель через API. " +
+"Запрос: " + prompt;
+    }
+  });
+
+  $("copyCodeBtn").addEventListener("click", async () => {
+    try {
+      await navigator.clipboard.writeText($("codeOutput").value);
+      $("trainStatus").textContent = "Код скопирован.";
+    } catch {
+      $("codeOutput").select();
+      $("trainStatus").textContent = "Выдели код и скопируй вручную.";
+    }
+  });
+
+  try {
+    const saved = localStorage.getItem("neurolab_model_v1");
+    if (saved) {
+      model = JSON.parse(saved);
+      $("trainStatus").textContent =
+        "Загружена модель · эпох обучения: " + model.trainedEpochs;
+    }
+  } catch {}
+})();
+</script>
